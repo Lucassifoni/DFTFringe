@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dftfringe-cli:latest
+
+  dev:
+    image: ubuntu:22.04
+    volumes:
+      - .:/src
+      - ./data:/data
+    working_dir: /src
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y build-essential cmake libopencv-dev &&
+        mkdir -p build && cd build &&
+        cmake .. && make -j$(nproc)
+      "
