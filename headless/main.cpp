@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <iomanip>
 #include <opencv2/opencv.hpp>
 
 #include "types.h"
@@ -25,6 +26,7 @@ struct Args {
 
     bool hasOutline = false;
     bool verbose = false;
+    bool structuredOutput = false;
 };
 
 static void printUsage(const char *prog) {
@@ -56,6 +58,7 @@ static void printUsage(const char *prog) {
               << "  --zernikes <file.csv>    Output Zernike coefficients\n"
               << "  --dft-output <file.png>  Output DFT preview image\n"
               << "  --verbose                Verbose output\n"
+              << "  --structured-output      Output results as key<TAB>value pairs\n"
               << "  --help                   Show this help\n";
 }
 
@@ -143,6 +146,8 @@ static Args parseArgs(int argc, char **argv) {
             args.outputDft = argv[++i];
         } else if (arg == "--verbose") {
             args.verbose = true;
+        } else if (arg == "--structured-output") {
+            args.structuredOutput = true;
         } else {
             std::cerr << "Unknown option: " << arg << "\n";
             printUsage(argv[0]);
@@ -251,7 +256,20 @@ int main(int argc, char **argv) {
             if (args.verbose) {
                 std::cerr << "Wrote DFT preview to " << args.outputDft << "\n";
             }
-        } else {
+        }
+
+        if (args.structuredOutput) {
+            std::cout << "mode\tdft_preview\n";
+            std::cout << "input_file\t" << args.inputFile << "\n";
+            std::cout << "input_width\t" << input.cols << "\n";
+            std::cout << "input_height\t" << input.rows << "\n";
+            std::cout << "outline_center_x\t" << args.outside.center.x << "\n";
+            std::cout << "outline_center_y\t" << args.outside.center.y << "\n";
+            std::cout << "outline_radius\t" << args.outside.radius << "\n";
+            std::cout << "processed_size\t" << prep.image.cols << "\n";
+            std::cout << "processed_scale_factor\t" << prep.scaleFactor << "\n";
+            std::cout << "output_dft_preview\t" << (args.outputDft.empty() ? "" : args.outputDft) << "\n";
+        } else if (args.outputDft.empty()) {
             std::cout << "DFT preview computed. Use --dft-output to save.\n";
         }
         return 0;
@@ -324,22 +342,6 @@ int main(int argc, char **argv) {
 
     SurfaceMetrics wfMetrics = computeMetrics(wavefrontSurface, finalMask, args.mirror.lambda);
 
-    std::cout << "=== Raw Zernikes ===\n";
-    std::cout << "Z0 (piston): " << (zernikes.size() > 0 ? zernikes[0] : 0) << "\n";
-    std::cout << "Z1 (X tilt): " << (zernikes.size() > 1 ? zernikes[1] : 0) << "\n";
-    std::cout << "Z2 (Y tilt): " << (zernikes.size() > 2 ? zernikes[2] : 0) << "\n";
-    std::cout << "Z8 (spherical): " << (zernikes.size() > 8 ? zernikes[8] : 0) << "\n";
-
-    if (nullValue != 0.0) {
-        std::cout << "\nSoftware null: " << nullValue << "\n";
-        std::cout << "Z8 (nulled): " << (finalZernikes.size() > 8 ? finalZernikes[8] : 0) << "\n";
-    }
-
-    std::cout << "\n=== Wavefront (piston/tilt/defocus/coma subtracted) ===\n";
-    std::cout << "RMS: " << wfMetrics.rms << " waves\n";
-    std::cout << "PV: " << wfMetrics.pv << " waves\n";
-    std::cout << "Strehl: " << wfMetrics.strehl << "\n";
-
     if (!args.outputWft.empty()) {
         Wavefront wf;
         wf.data = wavefrontSurface;
@@ -363,6 +365,57 @@ int main(int argc, char **argv) {
         if (args.verbose) {
             std::cerr << "Wrote Zernikes to " << args.outputCsv << "\n";
         }
+    }
+
+    if (args.structuredOutput) {
+        std::cout << std::setprecision(8);
+        std::cout << "mode\tfull\n";
+        std::cout << "input_file\t" << args.inputFile << "\n";
+        std::cout << "input_width\t" << input.cols << "\n";
+        std::cout << "input_height\t" << input.rows << "\n";
+        std::cout << "outline_center_x\t" << args.outside.center.x << "\n";
+        std::cout << "outline_center_y\t" << args.outside.center.y << "\n";
+        std::cout << "outline_radius\t" << args.outside.radius << "\n";
+        std::cout << "mirror_diameter\t" << args.mirror.diameter << "\n";
+        std::cout << "mirror_roc\t" << args.mirror.roc << "\n";
+        std::cout << "mirror_lambda\t" << args.mirror.lambda << "\n";
+        std::cout << "mirror_conic\t" << args.mirror.conic << "\n";
+        std::cout << "mirror_obstruction\t" << args.mirror.obstruction << "\n";
+        std::cout << "mirror_fringe_spacing\t" << args.mirror.fringeSpacing << "\n";
+        std::cout << "processing_dft_size\t" << args.process.dftSize << "\n";
+        std::cout << "processing_center_filter\t" << args.process.centerFilter << "\n";
+        std::cout << "processing_smooth_factor\t" << args.process.smoothFactor << "\n";
+        std::cout << "processing_zernike_terms\t" << args.process.zernikeTerms << "\n";
+        std::cout << "null_z8_computed\t" << args.mirror.computeZ8() << "\n";
+        std::cout << "null_value\t" << nullValue << "\n";
+        std::cout << "null_applied\t" << (args.mirror.doNull && args.mirror.conic != 0.0 ? "true" : "false") << "\n";
+        for (size_t i = 0; i < zernikes.size(); ++i) {
+            std::cout << "zernike_raw_" << i << "\t" << zernikes[i] << "\n";
+        }
+        for (size_t i = 0; i < finalZernikes.size(); ++i) {
+            std::cout << "zernike_nulled_" << i << "\t" << finalZernikes[i] << "\n";
+        }
+        std::cout << "rms_waves\t" << wfMetrics.rms << "\n";
+        std::cout << "pv_waves\t" << wfMetrics.pv << "\n";
+        std::cout << "strehl\t" << wfMetrics.strehl << "\n";
+        std::cout << "output_wavefront\t" << (args.outputWft.empty() ? "" : args.outputWft) << "\n";
+        std::cout << "output_zernikes_csv\t" << (args.outputCsv.empty() ? "" : args.outputCsv) << "\n";
+    } else {
+        std::cout << "=== Raw Zernikes ===\n";
+        std::cout << "Z0 (piston): " << (zernikes.size() > 0 ? zernikes[0] : 0) << "\n";
+        std::cout << "Z1 (X tilt): " << (zernikes.size() > 1 ? zernikes[1] : 0) << "\n";
+        std::cout << "Z2 (Y tilt): " << (zernikes.size() > 2 ? zernikes[2] : 0) << "\n";
+        std::cout << "Z8 (spherical): " << (zernikes.size() > 8 ? zernikes[8] : 0) << "\n";
+
+        if (nullValue != 0.0) {
+            std::cout << "\nSoftware null: " << nullValue << "\n";
+            std::cout << "Z8 (nulled): " << (finalZernikes.size() > 8 ? finalZernikes[8] : 0) << "\n";
+        }
+
+        std::cout << "\n=== Wavefront (piston/tilt/defocus/coma subtracted) ===\n";
+        std::cout << "RMS: " << wfMetrics.rms << " waves\n";
+        std::cout << "PV: " << wfMetrics.pv << " waves\n";
+        std::cout << "Strehl: " << wfMetrics.strehl << "\n";
     }
 
     return 0;

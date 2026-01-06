@@ -132,8 +132,39 @@ One of `--outline` or `--circle` is required.
 | `--zernikes <file.csv>` | Output Zernike coefficients |
 | `--dft-output <file.png>` | Output DFT preview image |
 | `--verbose` | Verbose output |
+| `--structured-output` | Output results as key-value pairs (tab-separated) |
 
 ## Output Formats
+
+### Structured output (--structured-output)
+
+Tab-separated key-value pairs for easy parsing:
+
+```
+mode	full
+input_file	/path/to/image.jpg
+input_width	3456
+input_height	2304
+outline_center_x	1672.5
+outline_center_y	1075
+outline_radius	568
+mirror_diameter	203
+mirror_roc	1438
+mirror_lambda	518
+mirror_conic	-1.33
+...
+zernike_raw_0	9.689
+zernike_raw_1	17.017
+...
+zernike_nulled_0	9.689
+zernike_nulled_8	-0.003
+...
+rms_waves	0.058
+pv_waves	0.36
+strehl	0.87
+output_wavefront	/path/to/result.wft
+output_zernikes_csv	/path/to/zernikes.csv
+```
 
 ### Wavefront file (.wft)
 
