@@ -41,11 +41,8 @@ struct MirrorConfig {
     bool doNull = true;
 
     double computeZ8() const {
-        if (roc == 0.0 || diameter == 0.0) return 0.0;
-        double focalLength = roc / 2.0;
-        double fRatio = focalLength / diameter;
-        double z8_550 = diameter / (1.1264 * pow(fRatio, 3));
-        return z8_550 * (550.0 / lambda);
+        if (roc == 0.0 || lambda == 0.0 || diameter == 0.0) return 0.0;
+        return (pow(diameter, 4) * 1000000.0) / (384.0 * pow(roc, 3) * lambda);
     }
 
     double nullValue() const {
