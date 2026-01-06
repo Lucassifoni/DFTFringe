@@ -161,18 +161,18 @@ static void writeWavefront(const std::string &path, const Wavefront &wf) {
     }
 
     f << wf.data.cols << " " << wf.data.rows << "\n";
-    for (int y = 0; y < wf.data.rows; ++y) {
+    for (int y = wf.data.rows - 1; y >= 0; --y) {
         for (int x = 0; x < wf.data.cols; ++x) {
-            f << wf.data.at<double>(y, x);
-            if (x < wf.data.cols - 1) f << " ";
+            f << wf.data.at<double>(y, x) << "\n";
         }
-        f << "\n";
     }
 
-    f << "outside " << wf.outside.center.x << " " << wf.outside.center.y
-      << " " << wf.outside.radius << "\n";
-    f << "obstruction " << wf.obstruction.center.x << " " << wf.obstruction.center.y
-      << " " << wf.obstruction.radius << "\n";
+    f << "outside ellipse " << wf.outside.center.x << " " << wf.outside.center.y
+      << " " << wf.outside.radius << " " << wf.outside.radius << "\n";
+    if (wf.obstruction.radius > 0) {
+        f << "obstruction ellipse " << wf.obstruction.center.x << " " << wf.obstruction.center.y
+          << " " << wf.obstruction.radius << " " << wf.obstruction.radius << "\n";
+    }
     f << "DIAM " << wf.mirror.diameter << "\n";
     f << "ROC " << wf.mirror.roc << "\n";
     f << "Lambda " << wf.mirror.lambda << "\n";
