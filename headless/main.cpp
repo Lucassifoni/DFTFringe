@@ -43,6 +43,7 @@ static void printUsage(const char *prog) {
               << "  --fringe-spacing <val>   Fringe spacing multiplier (default: 1.0)\n"
               << "  --flip-v                 Flip vertically\n"
               << "  --flip-h                 Flip horizontally\n"
+              << "  --no-null                Disable software null (for spheres)\n"
               << "\nProcessing:\n"
               << "  --dft-size <pixels>      DFT processing size (default: 640)\n"
               << "  --center-filter <val>    Center filter radius (default: 0)\n"
@@ -122,6 +123,8 @@ static Args parseArgs(int argc, char **argv) {
             args.mirror.flipV = true;
         } else if (arg == "--flip-h") {
             args.mirror.flipH = true;
+        } else if (arg == "--no-null") {
+            args.mirror.doNull = false;
         } else if (arg == "--dft-size" && i + 1 < argc) {
             args.process.dftSize = std::stoi(argv[++i]);
         } else if (arg == "--center-filter" && i + 1 < argc) {
@@ -297,23 +300,59 @@ int main(int argc, char **argv) {
     std::vector<double> zernikes = fitZernikes(unwrapped, finalMask, prep.outside,
                                                args.process.zernikeTerms, false);
 
-    SurfaceMetrics metrics = computeMetrics(unwrapped, finalMask, args.mirror.lambda);
+    double nullValue = 0.0;
+    if (args.mirror.doNull && args.mirror.conic != 0.0) {
+        nullValue = args.mirror.nullValue();
+        if (args.verbose) {
+            std::cerr << "Software null: z8=" << args.mirror.computeZ8()
+                      << " × cc=" << args.mirror.conic
+                      << " = " << nullValue << "\n";
+        }
+    }
 
-    std::cout << "RMS: " << metrics.rms << " waves\n";
-    std::cout << "PV: " << metrics.pv << " waves\n";
-    std::cout << "Strehl: " << metrics.strehl << "\n";
+    std::vector<double> nulledZernikes = zernikes;
+    if (nullValue != 0.0 && nulledZernikes.size() > 8) {
+        nulledZernikes[8] -= nullValue;
+    }
+
+    std::vector<bool> enables(args.process.zernikeTerms, true);
+    cv::Mat nulledSurface = computeNulledSurface(unwrapped, finalMask, prep.outside,
+                                                  zernikes, enables, 0, 3);
+    if (nullValue != 0.0) {
+        nulledSurface = computeNulledSurface(unwrapped, finalMask, prep.outside,
+                                              nulledZernikes, enables, 0, 3);
+    }
+
+    SurfaceMetrics rawMetrics = computeMetrics(unwrapped, finalMask, args.mirror.lambda);
+    SurfaceMetrics nulledMetrics = computeMetrics(nulledSurface, finalMask, args.mirror.lambda);
+
+    std::cout << "=== Raw Surface ===\n";
+    std::cout << "RMS: " << rawMetrics.rms << " waves\n";
+    std::cout << "PV: " << rawMetrics.pv << " waves\n";
+    std::cout << "Z8 (spherical): " << (zernikes.size() > 8 ? zernikes[8] : 0) << "\n";
+
+    if (nullValue != 0.0) {
+        std::cout << "\n=== Nulled Surface (piston/tilt removed) ===\n";
+        std::cout << "Software null value: " << nullValue << "\n";
+        std::cout << "RMS: " << nulledMetrics.rms << " waves\n";
+        std::cout << "PV: " << nulledMetrics.pv << " waves\n";
+        std::cout << "Z8 (nulled): " << (nulledZernikes.size() > 8 ? nulledZernikes[8] : 0) << "\n";
+        std::cout << "Strehl: " << nulledMetrics.strehl << "\n";
+    } else {
+        std::cout << "Strehl: " << rawMetrics.strehl << "\n";
+    }
 
     if (!args.outputWft.empty()) {
         Wavefront wf;
-        wf.data = unwrapped;
+        wf.data = (nullValue != 0.0) ? nulledSurface : unwrapped;
         wf.mask = finalMask;
-        wf.zernikes = zernikes;
+        wf.zernikes = (nullValue != 0.0) ? nulledZernikes : zernikes;
         wf.outside = prep.outside;
         wf.obstruction = prep.center;
         wf.mirror = args.mirror;
-        wf.rms = metrics.rms;
-        wf.pv = metrics.pv;
-        wf.strehl = metrics.strehl;
+        wf.rms = (nullValue != 0.0) ? nulledMetrics.rms : rawMetrics.rms;
+        wf.pv = (nullValue != 0.0) ? nulledMetrics.pv : rawMetrics.pv;
+        wf.strehl = (nullValue != 0.0) ? nulledMetrics.strehl : rawMetrics.strehl;
 
         writeWavefront(args.outputWft, wf);
         if (args.verbose) {
@@ -322,7 +361,7 @@ int main(int argc, char **argv) {
     }
 
     if (!args.outputCsv.empty()) {
-        writeZernikes(args.outputCsv, zernikes);
+        writeZernikes(args.outputCsv, (nullValue != 0.0) ? nulledZernikes : zernikes);
         if (args.verbose) {
             std::cerr << "Wrote Zernikes to " << args.outputCsv << "\n";
         }

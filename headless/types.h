@@ -4,6 +4,7 @@
 #include <opencv2/core.hpp>
 #include <vector>
 #include <string>
+#include <cmath>
 
 struct Point2D {
     double x = 0.0;
@@ -37,6 +38,19 @@ struct MirrorConfig {
     double fringeSpacing = 1.0;
     bool flipV = false;
     bool flipH = false;
+    bool doNull = true;
+
+    double computeZ8() const {
+        if (roc == 0.0 || diameter == 0.0) return 0.0;
+        double focalLength = roc / 2.0;
+        double fRatio = focalLength / diameter;
+        double z8_550 = diameter / (1.1264 * pow(fRatio, 3));
+        return z8_550 * (550.0 / lambda);
+    }
+
+    double nullValue() const {
+        return computeZ8() * conic;
+    }
 };
 
 enum class ProcessMode {
