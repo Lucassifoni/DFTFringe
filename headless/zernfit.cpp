@@ -123,6 +123,102 @@ cv::Mat computeNulledSurface(const cv::Mat &surface,
     return nulled;
 }
 
+std::vector<bool> getDefaultEnables(int numTerms) {
+    std::vector<bool> enables(numTerms, true);
+    if (numTerms > 0) enables[0] = false;  // piston
+    if (numTerms > 1) enables[1] = false;  // x tilt
+    if (numTerms > 2) enables[2] = false;  // y tilt
+    if (numTerms > 3) enables[3] = false;  // defocus
+    if (numTerms > 6) enables[6] = false;  // x coma
+    if (numTerms > 7) enables[7] = false;  // y coma
+    return enables;
+}
+
+cv::Mat subtractZernikes(const cv::Mat &surface,
+                         const cv::Mat &mask,
+                         const CircleOutline &outside,
+                         const std::vector<double> &zernikes,
+                         const std::vector<bool> &termsToSubtract) {
+    int nx = surface.cols;
+    int ny = surface.rows;
+
+    cv::Mat result = surface.clone();
+
+    double midx = outside.center.x;
+    double midy = outside.center.y;
+    double rad = outside.radius;
+
+    int numTerms = std::min(zernikes.size(), termsToSubtract.size());
+
+    for (int y = 0; y < ny; ++y) {
+        for (int x = 0; x < nx; ++x) {
+            if (mask.at<uchar>(y, x) == 0) continue;
+
+            double ux = (x - midx) / rad;
+            double uy = (y - midy) / rad;
+            double rho = sqrt(ux * ux + uy * uy);
+
+            if (rho > 1.0) continue;
+
+            double theta = atan2(uy, ux);
+            zernikePolar zpolar(rho, theta, numTerms);
+
+            double zernVal = 0.0;
+            for (int z = 0; z < numTerms; ++z) {
+                if (termsToSubtract[z]) {
+                    zernVal += zernikes[z] * zpolar.zernike(z);
+                }
+            }
+
+            result.at<double>(y, x) -= zernVal;
+        }
+    }
+
+    return result;
+}
+
+cv::Mat reconstructFromZernikes(const cv::Mat &mask,
+                                const CircleOutline &outside,
+                                const std::vector<double> &zernikes,
+                                const std::vector<bool> &termsToInclude) {
+    int nx = mask.cols;
+    int ny = mask.rows;
+
+    cv::Mat result = cv::Mat::zeros(ny, nx, CV_64F);
+
+    double midx = outside.center.x;
+    double midy = outside.center.y;
+    double rad = outside.radius;
+
+    int numTerms = std::min(zernikes.size(), termsToInclude.size());
+
+    for (int y = 0; y < ny; ++y) {
+        for (int x = 0; x < nx; ++x) {
+            if (mask.at<uchar>(y, x) == 0) continue;
+
+            double ux = (x - midx) / rad;
+            double uy = (y - midy) / rad;
+            double rho = sqrt(ux * ux + uy * uy);
+
+            if (rho > 1.0) continue;
+
+            double theta = atan2(uy, ux);
+            zernikePolar zpolar(rho, theta, numTerms);
+
+            double zernVal = 0.0;
+            for (int z = 0; z < numTerms; ++z) {
+                if (termsToInclude[z]) {
+                    zernVal += zernikes[z] * zpolar.zernike(z);
+                }
+            }
+
+            result.at<double>(y, x) = zernVal;
+        }
+    }
+
+    return result;
+}
+
 SurfaceMetrics computeMetrics(const cv::Mat &surface, const cv::Mat &mask, double lambda) {
     SurfaceMetrics metrics;
 

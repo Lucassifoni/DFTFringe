@@ -310,49 +310,45 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::vector<double> nulledZernikes = zernikes;
-    if (nullValue != 0.0 && nulledZernikes.size() > 8) {
-        nulledZernikes[8] -= nullValue;
+    std::vector<double> finalZernikes = zernikes;
+    if (nullValue != 0.0 && finalZernikes.size() > 8) {
+        finalZernikes[8] -= nullValue;
     }
 
-    std::vector<bool> enables(args.process.zernikeTerms, true);
-    cv::Mat nulledSurface = computeNulledSurface(unwrapped, finalMask, prep.outside,
-                                                  zernikes, enables, 0, 3);
-    if (nullValue != 0.0) {
-        nulledSurface = computeNulledSurface(unwrapped, finalMask, prep.outside,
-                                              nulledZernikes, enables, 0, 3);
-    }
+    std::vector<bool> enables = getDefaultEnables(args.process.zernikeTerms);
 
-    SurfaceMetrics rawMetrics = computeMetrics(unwrapped, finalMask, args.mirror.lambda);
-    SurfaceMetrics nulledMetrics = computeMetrics(nulledSurface, finalMask, args.mirror.lambda);
+    cv::Mat wavefrontSurface = reconstructFromZernikes(finalMask, prep.outside,
+                                                        finalZernikes, enables);
 
-    std::cout << "=== Raw Surface ===\n";
-    std::cout << "RMS: " << rawMetrics.rms << " waves\n";
-    std::cout << "PV: " << rawMetrics.pv << " waves\n";
+    SurfaceMetrics wfMetrics = computeMetrics(wavefrontSurface, finalMask, args.mirror.lambda);
+
+    std::cout << "=== Raw Zernikes ===\n";
+    std::cout << "Z0 (piston): " << (zernikes.size() > 0 ? zernikes[0] : 0) << "\n";
+    std::cout << "Z1 (X tilt): " << (zernikes.size() > 1 ? zernikes[1] : 0) << "\n";
+    std::cout << "Z2 (Y tilt): " << (zernikes.size() > 2 ? zernikes[2] : 0) << "\n";
     std::cout << "Z8 (spherical): " << (zernikes.size() > 8 ? zernikes[8] : 0) << "\n";
 
     if (nullValue != 0.0) {
-        std::cout << "\n=== Nulled Surface (piston/tilt removed) ===\n";
-        std::cout << "Software null value: " << nullValue << "\n";
-        std::cout << "RMS: " << nulledMetrics.rms << " waves\n";
-        std::cout << "PV: " << nulledMetrics.pv << " waves\n";
-        std::cout << "Z8 (nulled): " << (nulledZernikes.size() > 8 ? nulledZernikes[8] : 0) << "\n";
-        std::cout << "Strehl: " << nulledMetrics.strehl << "\n";
-    } else {
-        std::cout << "Strehl: " << rawMetrics.strehl << "\n";
+        std::cout << "\nSoftware null: " << nullValue << "\n";
+        std::cout << "Z8 (nulled): " << (finalZernikes.size() > 8 ? finalZernikes[8] : 0) << "\n";
     }
+
+    std::cout << "\n=== Wavefront (piston/tilt/defocus/coma subtracted) ===\n";
+    std::cout << "RMS: " << wfMetrics.rms << " waves\n";
+    std::cout << "PV: " << wfMetrics.pv << " waves\n";
+    std::cout << "Strehl: " << wfMetrics.strehl << "\n";
 
     if (!args.outputWft.empty()) {
         Wavefront wf;
-        wf.data = (nullValue != 0.0) ? nulledSurface : unwrapped;
+        wf.data = wavefrontSurface;
         wf.mask = finalMask;
-        wf.zernikes = (nullValue != 0.0) ? nulledZernikes : zernikes;
+        wf.zernikes = finalZernikes;
         wf.outside = prep.outside;
         wf.obstruction = prep.center;
         wf.mirror = args.mirror;
-        wf.rms = (nullValue != 0.0) ? nulledMetrics.rms : rawMetrics.rms;
-        wf.pv = (nullValue != 0.0) ? nulledMetrics.pv : rawMetrics.pv;
-        wf.strehl = (nullValue != 0.0) ? nulledMetrics.strehl : rawMetrics.strehl;
+        wf.rms = wfMetrics.rms;
+        wf.pv = wfMetrics.pv;
+        wf.strehl = wfMetrics.strehl;
 
         writeWavefront(args.outputWft, wf);
         if (args.verbose) {
@@ -361,7 +357,7 @@ int main(int argc, char **argv) {
     }
 
     if (!args.outputCsv.empty()) {
-        writeZernikes(args.outputCsv, (nullValue != 0.0) ? nulledZernikes : zernikes);
+        writeZernikes(args.outputCsv, finalZernikes);
         if (args.verbose) {
             std::cerr << "Wrote Zernikes to " << args.outputCsv << "\n";
         }
