@@ -1,0 +1,21 @@
+Loaded image: 3456x2304
+Outline: center=(1672.5,1075) r=568
+Prepared image: 640x640 scale=0.56338
+Extracting phase...
+Fitting Zernikes (37 terms)...
+Software null: z8=2.87109 × cc=-1.33 = -3.81855
+=== Raw Zernikes ===
+Z0 (piston): 9.68947
+Z1 (X tilt): 17.0168
+Z2 (Y tilt): -6.077
+Z8 (spherical): -3.82123
+
+Software null: -3.81855
+Z8 (nulled): -0.00268516
+
+=== Wavefront (piston/tilt/defocus/coma subtracted) ===
+RMS: 0.0582684 waves
+PV: 0.359727 waves
+Strehl: 0.874557
+Wrote wavefront to /data/test_outputs/result.wft
+Wrote Zernikes to /data/test_outputs/zernikes.csv
