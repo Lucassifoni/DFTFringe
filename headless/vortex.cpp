@@ -352,8 +352,10 @@ cv::Mat extractPhase(const cv::Mat &gray, const cv::Mat &mask,
         }
     }
 
-    for (int i = 0; i < size; ++i)
-        dir[i] = fmod(dir[i] * M_PI + M_PI, 2 * M_PI) - M_PI;
+    for (int i = 0; i < size; ++i) {
+        double v = dir[i] * M_PI;
+        dir[i] = (v > M_PI) ? (v - 2 * M_PI) : ((v <= -M_PI) ? (v + 2 * M_PI) : v);
+    }
 
     imPlanes[1] = cv::Mat::zeros(Size(xsize, ysize), numType);
     double *imIm = imPlanes[1].ptr<double>(0);

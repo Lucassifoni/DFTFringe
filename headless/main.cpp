@@ -46,8 +46,8 @@ static void printUsage(const char *prog) {
               << "  --no-null                Disable software null (for spheres)\n"
               << "\nProcessing:\n"
               << "  --dft-size <pixels>      DFT processing size (default: 640)\n"
-              << "  --center-filter <val>    Center filter radius (default: 0)\n"
-              << "  --smooth <val>           Smoothing factor 0-100 (default: 50)\n"
+              << "  --center-filter <val>    Center filter radius (default: 10)\n"
+              << "  --smooth <val>           Smoothing factor 0-100 (default: 9)\n"
               << "  --zernike-terms <n>      Number of Zernike terms (default: 37)\n"
               << "\nModes:\n"
               << "  --dft-preview            Output DFT magnitude image only\n"
@@ -263,6 +263,8 @@ int main(int argc, char **argv) {
 
     cv::Mat phase = extractPhase(prep.image, prep.mask,
                                  args.process.centerFilter, args.process.smoothFactor);
+
+    phase *= -1.0;
 
     cv::Mat result = cv::Mat::zeros(phase.size(), CV_64F);
     phase.copyTo(result, prep.mask);

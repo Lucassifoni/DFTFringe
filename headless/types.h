@@ -58,8 +58,8 @@ enum class ProcessMode {
 struct ProcessConfig {
     ProcessMode mode = ProcessMode::Full;
     int dftSize = 640;
-    double smoothFactor = 50.0;
-    double centerFilter = 0.0;
+    double smoothFactor = 9.0;
+    double centerFilter = 10.0;
     int zernikeTerms = 37;
 };
 

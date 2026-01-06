@@ -35,7 +35,7 @@ docker run --rm -v "$(pwd):/data" dftfringe-cli \
     --outline "/data/$SAMPLE_OLN" \
     --dft-preview \
     --dft-output "/data/$OUTPUT_DIR/dft_preview.png" \
-    --verbose
+    --verbose 2>&1 | tee "$OUTPUT_DIR/dft_preview.log"
 
 echo ""
 echo "=== Full Processing ==="
@@ -48,7 +48,7 @@ docker run --rm -v "$(pwd):/data" dftfringe-cli \
     --conic $CONIC \
     --output "/data/$OUTPUT_DIR/result.wft" \
     --zernikes "/data/$OUTPUT_DIR/zernikes.csv" \
-    --verbose
+    --verbose 2>&1 | tee "$OUTPUT_DIR/processing.log"
 
 echo ""
 echo "=== Results ==="

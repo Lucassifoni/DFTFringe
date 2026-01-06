@@ -114,8 +114,8 @@ One of `--outline` or `--circle` is required.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--dft-size <pixels>` | 640 | DFT processing size |
-| `--center-filter <val>` | 0 | High-pass filter radius |
-| `--smooth <val>` | 50 | Smoothing factor (0-100) |
+| `--center-filter <val>` | 10 | High-pass filter radius |
+| `--smooth <val>` | 9 | Smoothing factor (0-100) |
 | `--zernike-terms <n>` | 37 | Number of Zernike terms to fit |
 
 ### Modes
