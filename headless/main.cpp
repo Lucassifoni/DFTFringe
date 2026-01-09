@@ -17,6 +17,7 @@ struct Args {
     std::string outputWft;
     std::string outputCsv;
     std::string outputDft;
+    std::string outputWavefrontPng;
 
     MirrorConfig mirror;
     ProcessConfig process;
@@ -61,6 +62,7 @@ static void printUsage(const char *prog) {
               << "  --output <file.wft>      Output wavefront file\n"
               << "  --zernikes <file.csv>    Output Zernike coefficients\n"
               << "  --dft-output <file.png>  Output DFT preview image\n"
+              << "  --wavefront-png <file>   Output wavefront map as PNG (HotCold colormap)\n"
               << "  --verbose                Verbose output\n"
               << "  --structured-output      Output results as key<TAB>value pairs\n"
               << "  --help                   Show this help\n";
@@ -223,6 +225,8 @@ static Args parseArgs(int argc, char **argv) {
             args.outputCsv = argv[++i];
         } else if (arg == "--dft-output" && i + 1 < argc) {
             args.outputDft = argv[++i];
+        } else if (arg == "--wavefront-png" && i + 1 < argc) {
+            args.outputWavefrontPng = argv[++i];
         } else if (arg == "--verbose") {
             args.verbose = true;
         } else if (arg == "--structured-output") {
@@ -273,6 +277,78 @@ static void writeZernikes(const std::string &path, const std::vector<double> &ze
     for (size_t i = 0; i < zernikes.size(); ++i) {
         f << i << "," << zernikes[i] << "\n";
     }
+}
+
+static cv::Vec3b interpolateColor(const cv::Vec3b &c1, const cv::Vec3b &c2, double t) {
+    return cv::Vec3b(
+        static_cast<uchar>(c1[0] + t * (c2[0] - c1[0])),
+        static_cast<uchar>(c1[1] + t * (c2[1] - c1[1])),
+        static_cast<uchar>(c1[2] + t * (c2[2] - c1[2]))
+    );
+}
+
+static cv::Vec3b hotColdColormap(double value) {
+    struct ColorStop { double pos; cv::Vec3b color; };
+    static const ColorStop stops[] = {
+        {0.00, cv::Vec3b(0, 0, 0)},
+        {0.15, cv::Vec3b(255, 0, 0)},
+        {0.25, cv::Vec3b(255, 255, 0)},
+        {0.50, cv::Vec3b(0, 60, 150)},
+        {0.75, cv::Vec3b(160, 160, 160)},
+        {0.90, cv::Vec3b(0, 0, 255)},
+        {0.99, cv::Vec3b(0, 255, 255)},
+        {1.00, cv::Vec3b(255, 255, 255)}
+    };
+    static const int numStops = sizeof(stops) / sizeof(stops[0]);
+
+    if (value <= 0.0) return stops[0].color;
+    if (value >= 1.0) return stops[numStops - 1].color;
+
+    for (int i = 0; i < numStops - 1; ++i) {
+        if (value >= stops[i].pos && value <= stops[i + 1].pos) {
+            double t = (value - stops[i].pos) / (stops[i + 1].pos - stops[i].pos);
+            return interpolateColor(stops[i].color, stops[i + 1].color, t);
+        }
+    }
+    return stops[numStops - 1].color;
+}
+
+static void writeWavefrontPng(const std::string &path, const cv::Mat &surface,
+                               const cv::Mat &mask, const cv::Mat &referenceSurface,
+                               bool verbose) {
+    cv::Scalar meanVal, stdVal;
+    cv::meanStdDev(referenceSurface, meanVal, stdVal, mask);
+    double mean = meanVal[0];
+    double std = std::max(stdVal[0], 0.01);
+
+    double minVal, maxVal;
+    cv::minMaxLoc(referenceSurface, &minVal, &maxVal, nullptr, nullptr, mask);
+
+    double zmin = mean - 3.0 * std;
+    double zmax = mean + 3.0 * std;
+    double range = zmax - zmin;
+
+    if (verbose) {
+        std::cerr << "Wavefront PNG: reference mean=" << mean << " std=" << std
+                  << " range=[" << zmin << ", " << zmax << "]"
+                  << " (reference min/max: [" << minVal << ", " << maxVal << "])\n";
+    }
+
+    cv::Mat colorImage(surface.rows, surface.cols, CV_8UC3, cv::Scalar(0, 0, 0));
+
+    for (int y = 0; y < surface.rows; ++y) {
+        for (int x = 0; x < surface.cols; ++x) {
+            if (mask.at<uchar>(y, x) == 0) continue;
+
+            double val = surface.at<double>(y, x);
+            double normalized = (val - zmin) / range;
+            normalized = std::max(0.0, std::min(1.0, normalized));
+
+            colorImage.at<cv::Vec3b>(y, x) = hotColdColormap(normalized);
+        }
+    }
+
+    cv::imwrite(path, colorImage);
 }
 
 int main(int argc, char **argv) {
@@ -360,8 +436,6 @@ int main(int argc, char **argv) {
 
     cv::Mat phase = extractPhase(prep.image, prep.mask,
                                  args.process.centerFilter, args.process.smoothFactor);
-
-    phase *= -1.0;
 
     cv::Mat result = cv::Mat::zeros(phase.size(), CV_64F);
     phase.copyTo(result, prep.mask);
@@ -479,6 +553,25 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (!args.outputWavefrontPng.empty()) {
+        std::vector<bool> termsToSubtract(enables.size());
+        for (size_t i = 0; i < enables.size(); ++i) {
+            termsToSubtract[i] = !enables[i];
+        }
+        std::vector<double> displayZernikes = zernikes;
+        if (args.mirror.doNull && nullValue != 0.0 && displayZernikes.size() > 8 && enables[8]) {
+            termsToSubtract[8] = true;
+            displayZernikes[8] = nullValue;
+        }
+        cv::Mat nulledSurface = subtractZernikes(unwrapped, finalMask, prep.outside,
+                                                  displayZernikes, termsToSubtract);
+        writeWavefrontPng(args.outputWavefrontPng, nulledSurface, finalMask,
+                          wavefrontSurface, args.verbose);
+        if (args.verbose) {
+            std::cerr << "Wrote wavefront PNG to " << args.outputWavefrontPng << "\n";
+        }
+    }
+
     if (args.structuredOutput) {
         std::cout << std::setprecision(8);
         std::cout << "mode\tfull\n";
@@ -514,6 +607,7 @@ int main(int argc, char **argv) {
         std::cout << "strehl\t" << wfMetrics.strehl << "\n";
         std::cout << "output_wavefront\t" << (args.outputWft.empty() ? "" : args.outputWft) << "\n";
         std::cout << "output_zernikes_csv\t" << (args.outputCsv.empty() ? "" : args.outputCsv) << "\n";
+        std::cout << "output_wavefront_png\t" << (args.outputWavefrontPng.empty() ? "" : args.outputWavefrontPng) << "\n";
     } else {
         std::cout << "=== Raw Zernikes ===\n";
         std::cout << "Z0 (piston): " << (zernikes.size() > 0 ? zernikes[0] : 0) << "\n";
