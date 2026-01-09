@@ -108,6 +108,8 @@ One of `--outline` or `--circle` is required.
 | `--fringe-spacing <val>` | 1.0 | Fringe spacing multiplier |
 | `--flip-v` | false | Flip vertically |
 | `--flip-h` | false | Flip horizontally |
+| `--invert` | false | Force wavefront inversion |
+| `--no-auto-invert` | false | Disable automatic inversion detection |
 
 ### Processing
 
@@ -153,6 +155,8 @@ mirror_roc	1438
 mirror_lambda	518
 mirror_conic	-1.33
 ...
+inversion_detected	false
+inversion_applied	false
 zernike_raw_0	9.689
 zernike_raw_1	17.017
 ...
@@ -220,6 +224,25 @@ Null value = Z8 × conic
 - Null value = 4.31 × -1.33 = -5.73 waves
 
 The CLI automatically applies this null when `--conic` is specified (unless `--no-null` is used).
+
+## Auto-Inversion Detection
+
+Interferogram phase can be ambiguous in sign. The CLI automatically detects and corrects inverted wavefronts when a non-zero conic constant is provided.
+
+**Detection method:** If `conic × Z8 < 0`, the wavefront is likely inverted. For example:
+- A hyperbolic mirror (cc=-1.33) should have *negative* spherical aberration (undercorrected)
+- If Z8 comes out positive, the wavefront is inverted
+
+**Behavior:**
+- Auto-inversion is **enabled by default** when `--conic` is non-zero
+- Use `--no-auto-invert` to disable automatic detection
+- Use `--invert` to force inversion regardless of detection
+
+**Output fields:**
+- `inversion_detected`: Whether the conic × Z8 test indicated inversion
+- `inversion_applied`: Whether the wavefront was actually inverted
+
+For spherical mirrors (conic=0), auto-inversion cannot determine the correct sign. Use `--invert` or `--no-auto-invert` and verify manually.
 
 ## Processing Pipeline
 

@@ -27,6 +27,8 @@ struct Args {
     bool hasOutline = false;
     bool verbose = false;
     bool structuredOutput = false;
+    bool autoInvert = true;
+    bool forceInvert = false;
 };
 
 static void printUsage(const char *prog) {
@@ -46,6 +48,8 @@ static void printUsage(const char *prog) {
               << "  --flip-v                 Flip vertically\n"
               << "  --flip-h                 Flip horizontally\n"
               << "  --no-null                Disable software null (for spheres)\n"
+              << "  --invert                 Force wavefront inversion\n"
+              << "  --no-auto-invert         Disable automatic inversion detection\n"
               << "\nProcessing:\n"
               << "  --dft-size <pixels>      DFT processing size (default: 640)\n"
               << "  --center-filter <val>    Center filter radius (default: 10)\n"
@@ -62,24 +66,95 @@ static void printUsage(const char *prog) {
               << "  --help                   Show this help\n";
 }
 
+static bool readCircleBinary(std::ifstream &f, CircleOutline &c) {
+    char buf[36];
+    f.read(buf, 36);
+    if (!f || f.gcount() != 36) return false;
+
+    double *dp = reinterpret_cast<double*>(buf);
+    c.center.x = dp[0];
+    c.center.y = dp[1];
+    c.radius = dp[2];
+
+    int size = *reinterpret_cast<int*>(buf + 32);
+    if (size < 0 || size > 100) return false;
+
+    for (int i = 0; i < size; ++i) {
+        char pointBuf[16];
+        f.read(pointBuf, 16);
+        if (!f) return false;
+    }
+    return true;
+}
+
 static bool parseOutlineFile(const std::string &path, CircleOutline &outside, CircleOutline &center) {
     std::ifstream f(path, std::ios::binary);
     if (!f) return false;
 
-    double ox, oy, orad, cx, cy, crad;
-    f.read(reinterpret_cast<char*>(&ox), sizeof(double));
-    f.read(reinterpret_cast<char*>(&oy), sizeof(double));
-    f.read(reinterpret_cast<char*>(&orad), sizeof(double));
-    f.read(reinterpret_cast<char*>(&cx), sizeof(double));
-    f.read(reinterpret_cast<char*>(&cy), sizeof(double));
-    f.read(reinterpret_cast<char*>(&crad), sizeof(double));
+    f.seekg(0, std::ios::end);
+    std::streampos fsize = f.tellg();
+    f.seekg(0, std::ios::beg);
 
-    outside.center.x = ox;
-    outside.center.y = oy;
-    outside.radius = orad;
-    center.center.x = cx;
-    center.center.y = cy;
-    center.radius = crad;
+    char firstByte = f.peek();
+    if (firstByte != 0) {
+        f.close();
+        std::ifstream jf(path);
+        if (!jf) return false;
+
+        std::string content((std::istreambuf_iterator<char>(jf)),
+                            std::istreambuf_iterator<char>());
+
+        auto findValue = [&content](const std::string &key) -> double {
+            size_t pos = content.find("\"" + key + "\"");
+            if (pos == std::string::npos) return 0.0;
+            pos = content.find(":", pos);
+            if (pos == std::string::npos) return 0.0;
+            return std::stod(content.substr(pos + 1));
+        };
+
+        auto parseCircle = [&content](const std::string &section, CircleOutline &c) {
+            size_t start = content.find("\"" + section + "\"");
+            if (start == std::string::npos) return false;
+            size_t end = content.find("}", start);
+            if (end == std::string::npos) return false;
+            std::string sub = content.substr(start, end - start);
+
+            auto getValue = [&sub](const std::string &key) -> double {
+                size_t pos = sub.find("\"" + key + "\"");
+                if (pos == std::string::npos) return 0.0;
+                pos = sub.find(":", pos);
+                if (pos == std::string::npos) return 0.0;
+                return std::stod(sub.substr(pos + 1));
+            };
+            c.center.x = getValue("x");
+            c.center.y = getValue("y");
+            c.radius = getValue("radius");
+            return true;
+        };
+
+        parseCircle("outside_outline", outside);
+        parseCircle("inside_outline", center);
+        return true;
+    }
+
+    if (!readCircleBinary(f, outside)) return false;
+
+    CircleOutline filter;
+    if (!readCircleBinary(f, filter)) return false;
+
+    std::streampos currentPos = f.tellg();
+    if (currentPos > 0 && fsize > currentPos) {
+        char nextByte = f.peek();
+        if (nextByte != 'P' && nextByte != 'E' && nextByte != EOF) {
+            if (!readCircleBinary(f, center)) {
+                center.radius = 0;
+            }
+        } else {
+            center.radius = 0;
+        }
+    } else {
+        center.radius = 0;
+    }
 
     return true;
 }
@@ -128,6 +203,10 @@ static Args parseArgs(int argc, char **argv) {
             args.mirror.flipH = true;
         } else if (arg == "--no-null") {
             args.mirror.doNull = false;
+        } else if (arg == "--invert") {
+            args.forceInvert = true;
+        } else if (arg == "--no-auto-invert") {
+            args.autoInvert = false;
         } else if (arg == "--dft-size" && i + 1 < argc) {
             args.process.dftSize = std::stoi(argv[++i]);
         } else if (arg == "--center-filter" && i + 1 < argc) {
@@ -165,7 +244,7 @@ static void writeWavefront(const std::string &path, const Wavefront &wf) {
         return;
     }
 
-    f << wf.data.cols << " " << wf.data.rows << "\n";
+    f << wf.data.cols << "\n" << wf.data.rows << "\n";
     for (int y = wf.data.rows - 1; y >= 0; --y) {
         for (int x = 0; x < wf.data.cols; ++x) {
             f << wf.data.at<double>(y, x) << "\n";
@@ -320,6 +399,36 @@ int main(int argc, char **argv) {
     std::vector<double> zernikes = fitZernikes(unwrapped, finalMask, prep.outside,
                                                args.process.zernikeTerms, false);
 
+    bool wasInverted = false;
+    bool inversionDetected = false;
+
+    if (args.mirror.conic != 0.0 && zernikes.size() > 8) {
+        double z8 = zernikes[8];
+        if (args.mirror.conic * z8 < 0.0) {
+            inversionDetected = true;
+        }
+    }
+
+    if (args.forceInvert || (args.autoInvert && inversionDetected)) {
+        unwrapped *= -1.0;
+        zernikes = fitZernikes(unwrapped, finalMask, prep.outside,
+                               args.process.zernikeTerms, false);
+        wasInverted = true;
+        if (args.verbose) {
+            if (args.forceInvert) {
+                std::cerr << "Wavefront inverted (forced)\n";
+            } else {
+                std::cerr << "Wavefront inverted (auto-detected: conic=" << args.mirror.conic
+                          << " × Z8 was negative)\n";
+            }
+        }
+    } else if (inversionDetected && !args.autoInvert) {
+        if (args.verbose) {
+            std::cerr << "Warning: Wavefront may be inverted (conic × Z8 < 0), "
+                      << "but auto-invert is disabled\n";
+        }
+    }
+
     double nullValue = 0.0;
     if (args.mirror.doNull && args.mirror.conic != 0.0) {
         nullValue = args.mirror.nullValue();
@@ -343,10 +452,13 @@ int main(int argc, char **argv) {
     SurfaceMetrics wfMetrics = computeMetrics(wavefrontSurface, finalMask, args.mirror.lambda);
 
     if (!args.outputWft.empty()) {
+        cv::Mat maskedUnwrapped = cv::Mat::zeros(unwrapped.size(), CV_64F);
+        unwrapped.copyTo(maskedUnwrapped, finalMask);
+
         Wavefront wf;
-        wf.data = wavefrontSurface;
+        wf.data = maskedUnwrapped;
         wf.mask = finalMask;
-        wf.zernikes = finalZernikes;
+        wf.zernikes = zernikes;
         wf.outside = prep.outside;
         wf.obstruction = prep.center;
         wf.mirror = args.mirror;
@@ -389,6 +501,8 @@ int main(int argc, char **argv) {
         std::cout << "null_z8_computed\t" << args.mirror.computeZ8() << "\n";
         std::cout << "null_value\t" << nullValue << "\n";
         std::cout << "null_applied\t" << (args.mirror.doNull && args.mirror.conic != 0.0 ? "true" : "false") << "\n";
+        std::cout << "inversion_detected\t" << (inversionDetected ? "true" : "false") << "\n";
+        std::cout << "inversion_applied\t" << (wasInverted ? "true" : "false") << "\n";
         for (size_t i = 0; i < zernikes.size(); ++i) {
             std::cout << "zernike_raw_" << i << "\t" << zernikes[i] << "\n";
         }
