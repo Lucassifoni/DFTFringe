@@ -12,6 +12,9 @@ add_executable(dftfringe-cli
     punwrap.cpp
     zernikepolar.cpp
     zernfit.cpp
+    base64.cpp
+    protocol.cpp
+    sidecar.cpp
 )
 
 target_include_directories(dftfringe-cli PRIVATE

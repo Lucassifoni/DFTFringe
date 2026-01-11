@@ -10,6 +10,7 @@
 #include "vortex.h"
 #include "punwrap.h"
 #include "zernfit.h"
+#include "sidecar.h"
 
 struct Args {
     std::string inputFile;
@@ -352,6 +353,11 @@ static void writeWavefrontPng(const std::string &path, const cv::Mat &surface,
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && std::string(argv[1]) == "--sidecar") {
+        Sidecar sidecar;
+        return sidecar.run();
+    }
+
     if (argc < 2) {
         printUsage(argv[0]);
         return 1;
