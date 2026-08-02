@@ -120,12 +120,23 @@ macx {
     # opencv5. The CI installs opencv@4 to stay on the same major version as the
     # Linux and Windows builds, but a local checkout may only have OpenCV 5.
     packagesExist(opencv4) {
-        PKGCONFIG += opencv4
-        message(............OPENCV: opencv4)
+        OPENCV_PACKAGE = opencv4
     } else {
-        PKGCONFIG += opencv5
-        message(............OPENCV: opencv5)
+        OPENCV_PACKAGE = opencv5
     }
+    message(............OPENCV: $$OPENCV_PACKAGE)
+
+    # Deliberately not PKGCONFIG: the .pc file links every OpenCV module, which
+    # pulls dnn, gapi and the OpenVINO stack into the bundle and roughly doubles
+    # its size. Link the same six modules the Linux and Windows builds use.
+    QMAKE_CXXFLAGS += $$system(pkg-config --cflags-only-I $$OPENCV_PACKAGE)
+    LIBS += $$system(pkg-config --libs-only-L $$OPENCV_PACKAGE)
+    LIBS += -lopencv_calib3d
+    LIBS += -lopencv_core
+    LIBS += -lopencv_features2d
+    LIBS += -lopencv_highgui
+    LIBS += -lopencv_imgcodecs
+    LIBS += -lopencv_imgproc
 
     # Homebrew builds qwt as a macOS framework, so the headers sit inside the
     # bundle rather than in the include directory its pkg-config file names.

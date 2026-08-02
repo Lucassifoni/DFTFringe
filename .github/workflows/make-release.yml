@@ -30,6 +30,10 @@ jobs:
   call-build-windows:
     needs: check-semver
     uses: ./.github/workflows/build-windows.yml
+  # one disk image per architecture, see build-macos.yml
+  call-build-macos:
+    needs: check-semver
+    uses: ./.github/workflows/build-macos.yml
   # linux build is mainly here to check it builds. We have no acrtifact now.
   call-build-linux:
     permissions:
@@ -40,12 +44,16 @@ jobs:
 
   download-and-publish-artifacts:
     runs-on: ubuntu-latest
-    needs: call-build-windows
+    needs: [call-build-windows, call-build-macos]
     steps:
       # get artifact uploaded from build workflow
       - uses: actions/download-artifact@v4
         with:
           name: DFTFringe-windows-build-artifact
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: DFTFringe-macos-*-build-artifact
+          merge-multiple: true
       # create the GitHub release and upload the artifacts
       - name: publish Release
         uses: softprops/action-gh-release@v1
@@ -53,6 +61,8 @@ jobs:
           body: |
             - edit this changelog
             - test the installer one last time
+            - the macOS disk images are not notarised, so first launch needs
+              right click then Open. See the README for details.
             - make the actual release from this draft
           # the release will be drafted so it needs to be manually published after release notes editions
           draft: true
@@ -61,3 +71,5 @@ jobs:
           files: |
             DFTFringeInstaller_${{github.ref_name}}.exe
             Z_DFTFringe.exe.debug
+            DFTFringe-${{github.ref_name}}-arm64.dmg
+            DFTFringe-${{github.ref_name}}-x86_64.dmg
