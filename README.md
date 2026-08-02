@@ -50,9 +50,71 @@ cd ..
 make -j4
 ```
 
+# How to install DFTFringe on MacOS
+
+:point_right: Download the disk image matching your Mac from the
+[latest release](https://github.com/githubdoe/dftfringe/releases/latest):
+`arm64` for Apple silicon, `x86_64` for Intel. Open it and drag DFTFringe into
+Applications.
+
+:warning: The application is not notarised, because that requires a paid Apple
+Developer ID. macOS therefore refuses to open it on the first launch, usually by
+quitting immediately without a message. Clear the quarantine flag once:
+
+```
+xattr -dr com.apple.quarantine /Applications/DFTFringe.app
+```
+
+Alternatively, try to open it, then go to System Settings, Privacy & Security,
+and press "Open Anyway". Later launches need no special treatment.
+
+macOS 15 or later is required. The dependencies come from Homebrew, which builds
+for the version of macOS it runs on, so the release cannot target anything older.
+
 # How to build DFTFringe on MacOS
 
-:building_construction: Under construction :building_construction:
+Dependencies come from [Homebrew](https://brew.sh). `opencv@4` rather than
+`opencv`, because the latter is now OpenCV 5, and the Linux and Windows builds
+are on OpenCV 4:
+
+```
+brew install qt qwt opencv@4 armadillo
+```
+
+qmake finds these through pkg-config, so no path is hard coded in the project
+file. `opencv@4` is keg-only and Qt6 is split across several kegs, so point
+`PKG_CONFIG_PATH` at them. This works on both Apple silicon and Intel, where
+Homebrew lives in `/opt/homebrew` and `/usr/local` respectively:
+
+```
+export PKG_CONFIG_PATH="$(brew --prefix qwt)/lib/pkgconfig:$(brew --prefix opencv@4)/lib/pkgconfig:$(brew --prefix armadillo)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig"
+$(brew --prefix qt)/bin/qmake DFTFringe.pro CONFIG+=release
+make -j$(sysctl -n hw.ncpu)
+```
+
+That leaves `build/release/DFTFringe.app` linked against the Homebrew
+directories. To make it self contained, copy the dependencies in and rewrite
+their install names. `ColorMaps` has to sit next to the executable because
+`colormapviewerdlg` looks for it in `applicationDirPath()`:
+
+```
+$(brew --prefix qt)/bin/macdeployqt build/release/DFTFringe.app
+cp -R ColorMaps build/release/DFTFringe.app/Contents/MacOS/
+open build/release/DFTFringe.app
+```
+
+Notes:
+
+- The build targets the architecture of the machine it runs on. A universal
+  binary would mean rebuilding every Homebrew dependency for both architectures
+  and merging them with `lipo`, so the CI publishes one disk image per
+  architecture instead. See `.github/workflows/build-macos.yml`.
+- The project file links only the six OpenCV modules DFTFringe uses. Letting
+  `opencv4.pc` decide pulls in `dnn`, `gapi` and the OpenVINO stack and roughly
+  doubles the size of the bundle.
+- Homebrew builds qwt as a macOS framework, so its headers live inside
+  `qwt.framework/Headers` rather than in the include directory its pkg-config
+  file advertises. The project file adds that directory itself.
 
 # How to build DFTFringe on Windows
 
