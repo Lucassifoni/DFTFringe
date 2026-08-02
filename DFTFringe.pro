@@ -138,6 +138,11 @@ macx {
 
     LIBS += -lz       # zip compression library needed for cnpy.cpp
 
+    # Boost.Stacktrace guards _Unwind_Backtrace behind _GNU_SOURCE, which is a
+    # glibc convention. On macOS the function comes from Apple's libunwind and
+    # is available without it.
+    DEFINES += BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED
+
     message(........QT_VERSION: $$[QT_VERSION])
     message(.QT_INSTALL_PREFIX: $$[QT_INSTALL_PREFIX])
     message(..............ARCHS: $$QMAKE_APPLE_DEVICE_ARCHS)
