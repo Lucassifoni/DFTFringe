@@ -98,10 +98,15 @@ jobs:
           "$QT_PREFIX/bin/macdeployqt" build/release/DFTFringe.app -verbose=1
           # colormapviewerdlg looks for ColorMaps next to the executable.
           cp -R ColorMaps build/release/DFTFringe.app/Contents/MacOS/
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUNDLE_VERSION" \
-            build/release/DFTFringe.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" \
-            build/release/DFTFringe.app/Contents/Info.plist
+          # qmake only templates the version keys when VERSION is a dotted
+          # number, and untagged builds carry a commit sha, so the keys may be
+          # absent rather than merely wrong.
+          PLIST=build/release/DFTFringe.app/Contents/Info.plist
+          for key in CFBundleShortVersionString CFBundleVersion; do
+            /usr/libexec/PlistBuddy -c "Set :$key $BUNDLE_VERSION" "$PLIST" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Add :$key string $BUNDLE_VERSION" "$PLIST"
+          done
+          plutil -p "$PLIST"
 
       # Ad-hoc signature only. Without an Apple Developer ID the app cannot be
       # notarised, so users have to clear the quarantine flag themselves. See
