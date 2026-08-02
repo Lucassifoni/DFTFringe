@@ -114,7 +114,18 @@ macx {
     # hard coded here: /usr/local on Intel and /opt/homebrew on Apple silicon.
     # PKG_CONFIG_PATH must list the qwt, opencv and armadillo kegs.
     # See "How to build DFTFringe on MacOS" in README.md.
-    PKGCONFIG += armadillo opencv4 Qt6Qwt6
+    PKGCONFIG += armadillo Qt6Qwt6
+
+    # Homebrew's opencv formula now installs OpenCV 5, whose pkg-config name is
+    # opencv5. The CI installs opencv@4 to stay on the same major version as the
+    # Linux and Windows builds, but a local checkout may only have OpenCV 5.
+    packagesExist(opencv4) {
+        PKGCONFIG += opencv4
+        message(............OPENCV: opencv4)
+    } else {
+        PKGCONFIG += opencv5
+        message(............OPENCV: opencv5)
+    }
 
     LIBS += -lz       # zip compression library needed for cnpy.cpp
 

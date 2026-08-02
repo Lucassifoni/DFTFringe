@@ -23,8 +23,10 @@ jobs:
       - uses: actions/checkout@v4
 
       # opencv pulls a large dependency tree, so this is the slowest step by far.
+      # opencv@4 rather than opencv, which is now OpenCV 5, so that all three
+      # platforms build against the same OpenCV major version.
       - name: Install dependencies
-        run: brew install qt qwt opencv armadillo
+        run: brew install qt qwt opencv@4 armadillo
 
       # Homebrew lives in /usr/local on Intel and /opt/homebrew on Apple silicon,
       # and Qt6 is split across several kegs, so everything is resolved at runtime
@@ -34,14 +36,14 @@ jobs:
           QT_PREFIX="$(brew --prefix qt)"
           if [ ! -x "$QT_PREFIX/bin/qmake" ]; then QT_PREFIX="$(brew --prefix qtbase)"; fi
           echo "QT_PREFIX=$QT_PREFIX" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=$(brew --prefix qwt)/lib/pkgconfig:$(brew --prefix opencv)/lib/pkgconfig:$(brew --prefix armadillo)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$(brew --prefix qwt)/lib/pkgconfig:$(brew --prefix opencv@4)/lib/pkgconfig:$(brew --prefix armadillo)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
 
       # Prints everything needed to diagnose a failed configure step without
       # having to guess at the Homebrew layout from the outside.
       - name: Probe toolchain
         run: |
           echo "--- prefixes"
-          for f in qt qtbase qwt opencv armadillo; do
+          for f in qt qtbase qwt opencv@4 armadillo; do
             echo "$f -> $(brew --prefix $f 2>/dev/null || echo 'NOT INSTALLED')"
           done
           echo "--- qmake"
@@ -52,11 +54,11 @@ jobs:
           echo "--- pkg-config packages"
           pkg-config --list-all | grep -iE "qwt|opencv|armadillo" || echo "(no matches)"
           echo "--- pkg-config resolution"
-          for p in armadillo opencv4 Qt6Qwt6; do
-            echo "$p: $(pkg-config --modversion $p 2>&1)"
+          for p in armadillo opencv4 opencv5 Qt6Qwt6; do
+            echo "$p: $(pkg-config --modversion $p 2>&1 | head -1)"
           done
           echo "--- qwt keg layout"
-          find "$(brew --prefix qwt)" -maxdepth 3 \( -name "*.pc" -o -name "*.framework" -o -name "libqwt*" \) 2>/dev/null || true
+          find -L "$(brew --prefix qwt)" -maxdepth 3 \( -name "*.pc" -o -name "*.framework" -o -name "libqwt*" \) 2>/dev/null || true
 
       # Mirrors the naming used by build-windows.yml so artifacts line up.
       - name: Resolve version strings
