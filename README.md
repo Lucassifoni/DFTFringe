@@ -94,12 +94,13 @@ make -j$(sysctl -n hw.ncpu)
 
 That leaves `build/release/DFTFringe.app` linked against the Homebrew
 directories. To make it self contained, copy the dependencies in and rewrite
-their install names. `ColorMaps` has to sit next to the executable because
-`colormapviewerdlg` looks for it in `applicationDirPath()`:
+their install names. The colour maps go into `Contents/Resources`, because
+`Contents/MacOS` may hold nothing but code and `codesign` rejects a bundle with
+data files in there:
 
 ```
 $(brew --prefix qt)/bin/macdeployqt build/release/DFTFringe.app
-cp -R ColorMaps build/release/DFTFringe.app/Contents/MacOS/
+cp -R ColorMaps build/release/DFTFringe.app/Contents/Resources/
 open build/release/DFTFringe.app
 ```
 

@@ -34,6 +34,14 @@ colorMapViewerDlg::colorMapViewerDlg(QWidget *parent) :
 {
     QSettings set;
     gpath = qApp->applicationDirPath() + "/ColorMaps";
+#ifdef Q_OS_MAC
+    // Inside an application bundle the executable sits in Contents/MacOS, which
+    // may hold nothing but code: codesign refuses to sign data files there and
+    // the resulting signature is rejected, so the colour maps ship one level up
+    // in Contents/Resources instead.
+    if (!QDir(gpath).exists())
+        gpath = qApp->applicationDirPath() + "/../Resources/ColorMaps";
+#endif
     ui->setupUi(this);
     ui->path->setText(gpath);
     ui->listWidget->setViewMode(QListWidget::IconMode);

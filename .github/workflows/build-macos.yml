@@ -96,8 +96,10 @@ jobs:
       - name: Bundle dependencies
         run: |
           "$QT_PREFIX/bin/macdeployqt" build/release/DFTFringe.app -verbose=1
-          # colormapviewerdlg looks for ColorMaps next to the executable.
-          cp -R ColorMaps build/release/DFTFringe.app/Contents/MacOS/
+          # Contents/MacOS may hold nothing but code, otherwise codesign rejects
+          # the bundle and macOS refuses to launch it. colormapviewerdlg falls
+          # back to Contents/Resources on macOS.
+          cp -R ColorMaps build/release/DFTFringe.app/Contents/Resources/
           # qmake only templates the version keys when VERSION is a dotted
           # number, and untagged builds carry a commit sha, so the keys may be
           # absent rather than merely wrong.
