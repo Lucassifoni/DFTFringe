@@ -111,8 +111,19 @@ jobs:
       # Ad-hoc signature only. Without an Apple Developer ID the app cannot be
       # notarised, so users have to clear the quarantine flag themselves. See
       # "How to build DFTFringe on MacOS" in README.md.
+      #
+      # Signed inside out rather than with --deep, which Apple deprecates for
+      # signing and which can leave the nested frameworks invalidly signed.
       - name: Ad-hoc sign
-        run: codesign --force --deep --sign - build/release/DFTFringe.app
+        run: |
+          APP=build/release/DFTFringe.app
+          find "$APP/Contents/Frameworks" "$APP/Contents/PlugIns" \
+            \( -name "*.dylib" -o -name "*.so" \) \
+            -exec codesign --force --sign - --timestamp=none {} \; 2>/dev/null || true
+          find "$APP/Contents/Frameworks" -maxdepth 1 -name "*.framework" \
+            -exec codesign --force --sign - --timestamp=none {} \; 2>/dev/null || true
+          codesign --force --sign - --timestamp=none "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
 
       - name: Verify the bundle is self contained
         run: |
