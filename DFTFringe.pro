@@ -96,11 +96,11 @@ macx {
     CONFIG += app_bundle
     CONFIG += sdk_no_version_check
     CONFIG += link_pkgconfig
-    CONFIG += silent
 
-    QMAKE_FULL_VERSION=APP_VERSION
-    QMAKE_MACOSX_DEPLOYMENT_TARGET = 11.0
-    QMAKE_APPLE_DEVICE_ARCHS = x86_64 arm64
+    # Build for the host architecture only. Homebrew ships single architecture
+    # libraries, so a universal binary would need every dependency rebuilt and
+    # lipo'd. The CI produces one disk image per architecture instead.
+    QMAKE_APPLE_DEVICE_ARCHS = $$QMAKE_HOST.arch
 
     CONFIG( debug, debug|release )   { DESTDIR = build/debug }
     CONFIG( release, debug|release ) { DESTDIR = build/release }
@@ -109,32 +109,20 @@ macx {
     OBJECTS_DIR = $$DESTDIR/.obj #these change between build and release.
     RCC_DIR = $$DESTDIR/.qrc
     UI_DIR = $$DESTDIR/.ui
-    QMAKE_MKDIR = /usr/local/bin/mkdir # This tells QMAKE which mkdir command to use.
-    QMAKE_PKG_CONFIG = /opt/homebrew/bin/pkg-config # This tells QMAKE which pkg-config executable to use.
-    PKG_CONFIG_PATH = $$[QT_INSTALL_LIBS]/pkgconfig
-    INCLUDEPATH += -I$$[QT_INSTALL_PLUGINS]
-    LIBS += -L$$[QT_INSTALL_PLUGINS]
-    PKGCONFIG += armadillo opencv Qt5Qwt6
+
+    # Dependencies are resolved through pkg-config so that no Homebrew prefix is
+    # hard coded here: /usr/local on Intel and /opt/homebrew on Apple silicon.
+    # PKG_CONFIG_PATH must list the qwt, opencv and armadillo kegs.
+    # See "How to build DFTFringe on MacOS" in README.md.
+    PKGCONFIG += armadillo opencv4 Qt6Qwt6
+
+    LIBS += -lz       # zip compression library needed for cnpy.cpp
 
     message(........QT_VERSION: $$[QT_VERSION])
     message(.QT_INSTALL_PREFIX: $$[QT_INSTALL_PREFIX])
-    message(QT_INSTALL_HEADERS: $$[QT_INSTALL_HEADERS])
-    message(...QT_INSTALL_LIBS: $$[QT_INSTALL_LIBS])
-    message(QT_INSTALL_PLUGINS: $$[QT_INSTALL_PLUGINS])
-    message(...................)
+    message(..............ARCHS: $$QMAKE_APPLE_DEVICE_ARCHS)
     message(...........DESTDIR: $$DESTDIR)
-    message(...........MOC_DIR: $$MOC_DIR)
-    message(.......OBJECTS_DIR: $$OBJECTS_DIR)
-    message(...........RCC_DIR: $$RCC_DIR)
-    message(............UI_DIR: $$UI_DIR)
-    message(...................)
-    message(.......QMAKE_MKDIR: $$QMAKE_MKDIR)
-    message(..QMAKE_PKG_CONFIG: $$QMAKE_PKG_CONFIG)
-    message(...PKG_CONFIG_PATH: $$PKG_CONFIG_PATH)
-    message(.......INCLUDEPATH: $$INCLUDEPATH)
-    message(..............LIBS: $$LIBS)
     message(.........PKGCONFIG: $$PKGCONFIG)
-    message(............CONFIG: $$CONFIG)
 }
 
 # Below are the includes for source files and other resources, sorted alphabetically. ##################################
