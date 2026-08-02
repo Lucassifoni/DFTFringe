@@ -75,6 +75,7 @@
 #include "ui_oglrendered.h"
 #include "astigpolargraph.h"
 #include "utils.h"
+#include "cnpy.h"
 
 cv::Mat theMask;
 cv::Mat deb;
@@ -1133,77 +1134,185 @@ void SurfaceManager::createSurfaceFromPhaseMap(cv::Mat phase, CircleOutline outs
 }
 
 wavefront * SurfaceManager::readWaveFront(const QString &fileName){
-    std::ifstream file(fileName.toStdString().c_str());
-    if (!file) {
-        QString b = "Can not read file " + fileName + " " +strerror(errno);
-        QMessageBox::warning(NULL, tr("Read Wavefront File"),b);
-        return 0;
-    }
-    spdlog::get("logger")->trace("readWaveFront() step 1");
-    wavefront *wf = new wavefront();
-	wf->m_origin = WavefrontOrigin::File;
-    double width;
-    double height;
-    file >> width;
-    file >> height;
-    cv::Mat data(height,width, numType,0.);
-    spdlog::get("logger")->trace("readWaveFront() width {} height {}", width, height);
-
-    for( size_t y = 0; y < height; y++ ) {
-        for( size_t x = 0; x < width; x++ ) {
-            file >> data.at<double>(height - y-1,x);
-            //data.at<double>(height - y - 1, x) += dist(generator);
-        }
-    }
-    spdlog::get("logger")->trace("readWaveFront() step 2");
-
-    std::string line;
-    QString l;
     mirrorDlg *md = mirrorDlg::get_Instance();
-
-    double xm = (width-1)/2.,ym = (height-1)/2.,
-            radm = cv::min(xm,ym)-2 ,
-            roc = md->roc,
+    double xm,ym,radm;
+    double  roc = md->roc,
             lambda = md->lambda,
             diam = md->diameter;
-    double xo = width/2., yo = height/2., rado = 0;
 
-    std::string dummy;
-    while (getline(file, line)) {
-        l = QString::fromStdString(line);
-        std::istringstream iss(line);
-        if (l.startsWith("outside")) {
-            QStringList sl = l.split(" ");
-            xm = sl[2].toDouble();
-            radm = sl[4].toDouble();
-            ym = sl[3].toDouble();
-            continue;
+    double xo, yo, rado;
+    wavefront *wf = new wavefront();
+    wf->m_origin = WavefrontOrigin::File;
+    rado=0;
+
+    if (fileName.endsWith(".npz",Qt::CaseInsensitive)){
+        //
+        // code to read npz file (WavefrontPro file)
+        //
+        double reference_wavelength=550; // wavefrontPro scales and stores the wavefront to a 550nm wavelength, not laser wavelengths (like DFTF does)
+        double obsc=0;
+        bool bAlreadyNulled=false;
+        cnpy::npz_t npz_data = cnpy::npz_load(fileName.toStdString());
+        spdlog::get("logger")->info("npz file contents");
+        bool bWavefrontLoaded = false;
+        for (const auto& element : npz_data) {
+            cnpy::NpyArray e = element.second;
+            if (element.first == "null" && e.word_size != 0)
+                bAlreadyNulled=true;  //wfpro already nulled this wavefront
+            if (e.shape.size() == 0 && e.num_vals == 1 && (e.word_size==8 || e.word_size==4)) {
+                double temp;
+                double * dval = &temp; // dval points to temp if it's an integer (32bit number)
+
+                if (e.word_size==4)
+                    temp = *(e.data<int32_t>()); // the number is a 32bit integer
+                else
+                    dval = e.data<double>(); // the number is a 64bit double
+
+                spdlog::get("logger")->info("{} size {}  word size {} num_vals {} val: {}", element.first, e.shape.size(), e.word_size, e.num_vals, *dval);
+                if (element.first == "dia")
+                    diam = *dval;
+                else if (element.first == "roc")
+                    roc = *dval;
+                //else if (element.first == "conic")
+                //    double conic = *dval;   conic is ignored so no need to read it from the npz file
+                else if (element.first == "ref_wvl")
+                    reference_wavelength= *dval;
+                else if (element.first == "laser_wvl")
+                    lambda = *dval;
+                else if (element.first == "obsc")
+                    obsc = *dval;
+                else if (element.first == "null" && std::isnan(*dval) == false)
+                    bAlreadyNulled = true;  //wfpro already nulled this wavefront
+
+            }
+            else if (e.shape.size() == 0 && e.num_vals == 1 && e.word_size==1) {
+                unsigned char * ucval = e.data<unsigned char>();
+                spdlog::get("logger")->info("{} size {}  word size {} num_vals {} val: {}", element.first, e.shape.size(), e.word_size, e.num_vals, *ucval);
+            }
+            else {
+                spdlog::get("logger")->info("{} size {}  word size {} num_vals {}", element.first, e.shape.size(), e.word_size, e.num_vals);
+                if (element.first == "wf") {
+                    if (e.shape.size() != 2 || e.word_size != 8) {
+                        delete wf;
+                        QString b = "Can not read file " + fileName + ". Wavefront not as expected (expected 2 dimensional array of doubles)";
+                        QMessageBox::warning(NULL, tr("Read Wavefront File"),b);
+                        return nullptr; // error - was expecting 2 dimensional array of doubles
+                    }
+
+                    int width = e.shape[0];
+                    int height = e.shape[1];
+                    cv::Mat data(height,width, numType,0.);
+                    for (int y=0;y<height;y++) {
+                        for (int x=0;x<width;x++) {
+                            double temp = e.data<double>()[y*width+x];
+                            if (std::isnan(temp))
+                                temp=0;
+                            data.at<double>(height-y-1,x) = temp;
+                        }
+                    }
+                    wf->data = data;
+                    if (bAlreadyNulled)
+                        wf->useSANull = false; // wavefront pro already nulled the data
+                    bWavefrontLoaded = true;
+                    radm=width/2.0 - 0.5;
+                    xm=radm;
+                    ym=radm;
+                    xo=radm;
+                    yo=radm;
+                    if (obsc!=0) {
+                        rado=obsc; // TODO: osbc may be in mm?  Or it may be in pixels.  It may be a radius or it may be a diameter.
+                    }
+
+
+                }
+            }
         }
-        if (l.startsWith("DIAM")){
-            iss >> dummy >> diam;
-            continue;
+        if (bWavefrontLoaded == false) {
+            delete wf;
+            QString b = "Can not read file " + fileName + ". Wavefront not found";
+            QMessageBox::warning(NULL, tr("Read Wavefront File"),b);
+            return nullptr; // error - no wavefront found in npz file
         }
-        if (l.startsWith("ROC")){
-            iss >> dummy >> roc;
-            continue;
-        }
-        if (l.startsWith("Lambda")){
-            iss >> dummy >> lambda;
-            continue;
-        }
-        if (l.startsWith("obstruction")){
-            iss >> dummy >> dummy >> xo >> yo >> rado;
-            continue;
-        }
-        if (l.startsWith("ellipse_vertical_axis")){
-            md->m_outlineShape = ELLIPSE;
-            iss >> dummy >> md->m_verticalAxis;
-        }
-        if (l.startsWith("Do Not use null")){
-            wf->useSANull = false;
-        }
+        //
+        // Regarding this following line of code. wfpro stores the data with respect to the reference wavelength (typically 550nm).  But
+        // DFTF stores the data with respect to the laser wavelength. So we need to scale the data so DFTF is happy.  Both of these values
+        // (reference_wavelength, lambda) whould always be in the npz file although an early version of wfpro didn't store the laser wavlenth
+        // there so we use the laser wavelength from the mirror dialog as a default
+        //
+        wf->data = wf->data * (reference_wavelength / lambda);
+
     }
+    else {
+        std::ifstream file(fileName.toStdString().c_str());
+        if (!file) {
+            QString b = "Can not read file " + fileName + " " +strerror(errno);
+            QMessageBox::warning(NULL, tr("Read Wavefront File"),b);
+            delete wf;
+            return 0;
+        }
+        spdlog::get("logger")->trace("readWaveFront() step 1");
+        double width;
+        double height;
+        file >> width;
+        file >> height;
+        cv::Mat data(height,width, numType,0.);
+        spdlog::get("logger")->trace("readWaveFront() width {} height {}", width, height);
 
+        for( size_t y = 0; y < height; y++ ) {
+            for( size_t x = 0; x < width; x++ ) {
+                file >> data.at<double>(height - y-1,x);
+                //data.at<double>(height - y - 1, x) += dist(generator);
+            }
+        }
+        spdlog::get("logger")->trace("readWaveFront() step 2");
+
+        std::string line;
+        QString l;
+
+        xm = (width-1)/2.;
+        ym = (height-1)/2.,
+        radm = cv::min(xm,ym)-2;
+        xo = width/2.;
+        yo = height/2.;
+        rado = 0;
+
+        std::string dummy;
+        while (getline(file, line)) {
+            l = QString::fromStdString(line);
+            std::istringstream iss(line);
+            if (l.startsWith("outside")) {
+                QStringList sl = l.split(" ");
+                xm = sl[2].toDouble();
+                radm = sl[4].toDouble();
+                ym = sl[3].toDouble();
+                continue;
+            }
+            if (l.startsWith("DIAM")){
+                iss >> dummy >> diam;
+                continue;
+            }
+            if (l.startsWith("ROC")){
+                iss >> dummy >> roc;
+                continue;
+            }
+            if (l.startsWith("Lambda")){
+                iss >> dummy >> lambda;
+                continue;
+            }
+            if (l.startsWith("obstruction")){
+                iss >> dummy >> dummy >> xo >> yo >> rado;
+                continue;
+            }
+            if (l.startsWith("ellipse_vertical_axis")){
+                md->m_outlineShape = ELLIPSE;
+                iss >> dummy >> md->m_verticalAxis;
+            }
+            if (l.startsWith("Do Not use null") || l.startsWith("nulled") ){
+                wf->useSANull = false;
+            }
+        }
+        wf->data= data;
+    }
 
     wf->m_outside = CircleOutline(QPointF(xm,ym), radm);
     if (rado == 0){
@@ -1292,7 +1401,6 @@ wavefront * SurfaceManager::readWaveFront(const QString &fileName){
         }
         if (rocResp == YES || messageResult == QMessageBox::Yes){
             emit rocChanged(roc);
-
         }
         else {
             roc = md->roc;
@@ -1300,7 +1408,6 @@ wavefront * SurfaceManager::readWaveFront(const QString &fileName){
         }
     }
     wf->diameter = diam;
-    wf->data= data;
     wf->roc = roc;
     wf->lambda = lambda;
     wf->wasSmoothed = false;
@@ -1329,6 +1436,7 @@ bool SurfaceManager::loadWavefront(const QString &fileName){
 
     emit enableControls(false);
     bool mirrorParamsChanged = false;
+
     std::ifstream file(fileName.toStdString().c_str());
     if (!file) {
         QString b = "Can not read file " + fileName + " " +strerror(errno);
@@ -1658,11 +1766,11 @@ void SurfaceManager::average(QList<wavefront *> wfList){
     makeMask(wf);
     generateSurfacefromWavefront(m_currentNdx);
 
+    m_surfaceTools->select(m_currentNdx);
     if (needsUpdate)
         m_waveFrontTimer->start(1000);
     else
        loadComplete();
-    m_surfaceTools->select(m_currentNdx);
     QApplication::restoreOverrideCursor();
 }
 #include "averagewavefrontfilesdlg.h"
@@ -1834,16 +1942,18 @@ void SurfaceManager::subtract(wavefront *wf1, wavefront *wf2, bool use_null){
     }
     generateSurfacefromWavefront(m_currentNdx);
 
-    loadComplete();
     m_surfaceTools->select(m_currentNdx);
+    loadComplete();
 }
 
 void SurfaceManager::subtractWavefronts(){
     QList<QString> list;
     QList<int> doThese =  m_surfaceTools->SelectedWaveFronts();
+    QList<int> indexes;
     for (int i = 0; i < m_wavefronts.size(); ++i){
         if (!doThese.contains(i)) {
              list.append(m_wavefronts[i]->name);
+             indexes.append(i);
         }
     }
     subtractWavefronatsDlg dlg(list);
@@ -1857,7 +1967,7 @@ void SurfaceManager::subtractWavefronts(){
             return;
         }
         wavefront *wf1 = m_wavefronts[m_currentNdx];
-        wavefront *wf2 = m_wavefronts[ndx2];
+        wavefront *wf2 = m_wavefronts[indexes[ndx2]];
         subtract(wf1,wf2, dlg.use_null);
     }
 }

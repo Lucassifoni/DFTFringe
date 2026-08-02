@@ -623,7 +623,7 @@ std::vector<double> compute_average_radial_profile(
 
 void ProfilePlot::populate()
 {
-qDebug() << "Populate";
+
     m_plot->detachItems(QwtPlotItem::Rtti_PlotItem);
     compass->setGeometry(QRect(80,80,70,70));
     QString tmp("nanometers");
@@ -710,7 +710,7 @@ qDebug() << "Populate";
                 y_offset = m_waveFrontyOffsets[name];
             else if (m_waveFrontyOffsets.contains(name + " avg")){
                 y_offset = m_waveFrontyOffsets[name + " avg"];
-                qDebug() << "using avg";
+
             }
 
             // if show one angle
@@ -820,7 +820,17 @@ qDebug() << "Populate";
               left = transform.map(left);
               left.append(right);
 
-              QwtPlotCurve *cprofileavg = new QwtPlotCurve( name + " avg");
+              ProfileCurve *cprofileavg = new ProfileCurve( name + " avg");
+              if (left.size() >= 2) {
+                  // Distance between two samples
+                  double xDel = fabs(left[0].x() - left[1].x());
+
+                  // Recalculate hDelLimit using this specific xDel
+                  double hDelLimit = m_showNm * m_showSurface * ((outputLambda/m_wf->lambda) * fabs(xDel * tan(arcsecLimit)) / (outputLambda * 1.e-6));
+
+                  cprofileavg->setSlopeSettings(m_showSlopeError, hDelLimit, Settings2::m_profile->slopeErrorWidth());
+              }
+
               cprofileavg->setRenderHint( QwtPlotItem::RenderAntialiased );
               cprofileavg->setLegendAttribute( QwtPlotCurve::LegendShowSymbol, false );
               cprofileavg->setLegendIconSize(QSize(50,20));
@@ -1161,5 +1171,5 @@ void ProfilePlot::CreateWaveFrontFromAverage(){
     sm->createSurfaceFromPhaseMap(result,
                               m_wf->m_outside,
                               m_wf->m_inside,
-                              QString("avg"), WavefrontOrigin::Average);
+                              QString(m_wf->name.replace(".wft","")  + "_avg"), WavefrontOrigin::Average);
 }

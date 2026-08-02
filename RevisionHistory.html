@@ -10,7 +10,20 @@
     <h1>DFTFringe Version History</h1>
     <ul>
 
-        <li>Version 8.3.0</li>
+        <li>Version 8.4.0</li>
+        <ul>
+            <li>Ronchi and Foucault displays have new circular grid feature to measure zones better (right click on ronchi)</li>
+            <li>Ronchi compare now has blink mode that switches between 2 ronchis (first select at least 2 ronchis, then right click on the ronchi view, then select "compare" button, then "blink" button)</li>
+            <li>Can read Wavefront Pro format wavefront files (.npz files)</li>
+            <li>Fixed bug in subtract wavefront feature introduced in version 7.4.0 where sometimes it subtracts the wrong wavefront (but correctly showed you what it did on the right side).  Bug happened on A-B if B is farther down in the wavefront list than A.</li>
+        </ul>
+
+        <li>Version 8.3.2</li>
+        <ul>
+            <li>Fixed bug introduced in 8.3.1 in Ronchi Foucault where it was always doing autocollimate mode</li>
+        </ul>
+
+        <li>Version 8.3.1</li>
         <ul>
             <li>Auto-invert feature (and dialog) only applies to wavefronts created form igram, not those loaded from file, simulated, averaged, subtracted, etc.</li>
             <li>Contourview display is always perfectly square</li>
@@ -19,12 +32,13 @@
             <li>Fixed crash in "show statistics"</li>
             <li>Disabled dark mode on windows</li>
             <li>Updated dependencies versions</li>
+            <li>Configuration Preferences look cleaner and some spellings fixed</li>
             <li>Changes to profile plot:</li>
             <ul>
                 <li>Some features moved to context menu (right click menu)</li>
                 <li>Selecting multiple wavefronts on right show their corresponding profiles</li>
-                <li>New average feature that uses all data (not just 16 diameters)<li>
-                <li>Ability to create wavefront based on average profile<li>
+                <li>New average feature that uses all data (not just 16 diameters)</li>
+                <li>Ability to create wavefront based on average profile</li>
                 <li>Corrected bugs with percentages, inches, mm</li>
                 <li>Select multiple wavefronts and right click to see multiple Ronchi view</li>
                 <li>Multi Ronchi view lets you compare Ronchi's</li>

@@ -19,6 +19,7 @@ RonchiCompareDialog::RonchiCompareDialog(const QImage& img1, const QString& name
     resize(dlgW, dlgH);
     // Main layout for the dialog
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    QHBoxLayout* blinkLayout = new QHBoxLayout();
 
     // 1. Color Legend Labels at the top
     QHBoxLayout* legendLayout = new QHBoxLayout();
@@ -48,19 +49,37 @@ RonchiCompareDialog::RonchiCompareDialog(const QImage& img1, const QString& name
     mainLayout->addWidget(m_displayLabel, 1);
 
     // 3. Controls Area
-    mainLayout->addWidget(new QLabel(tr("Blend Ratio (Slide to compare difference):")));
+    mainLayout->addWidget(m_info = new QLabel(tr("Blend Ratio (Slide to compare difference):")));
+    m_info->setAlignment(Qt::AlignCenter);
+    m_info->setStyleSheet("font-weight: bold; font-size: 24px; color: #4CAF50; padding: 5px;");
+    m_slider = new QSlider(Qt::Horizontal);
+    m_slider->setRange(0, 100);
+    m_slider->setValue(50);
+    mainLayout->addWidget(m_slider);
 
-    QSlider* slider = new QSlider(Qt::Horizontal);
-    slider->setRange(0, 100);
-    slider->setValue(50);
-    mainLayout->addWidget(slider);
+    m_saveBtn = new QPushButton(tr("Save This Comparison Image"));
+    QPushButton* blinkBtn = new QPushButton(tr("Blink"));
 
-    QPushButton* saveBtn = new QPushButton(tr("Save This Comparison Image"));
-    mainLayout->addWidget(saveBtn);
+    mainLayout->addWidget(m_saveBtn);
+
+    blinkLayout->addSpacerItem( new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding));
+    blinkLayout->addWidget(blinkBtn);
+    m_speedSlider = new QSlider(Qt::Horizontal, this);
+    m_speedSlider->setRange(50, 1500);
+    m_speedSlider->setValue(250);
+    m_speedSlider->hide();
+
+
+    blinkLayout->addWidget(m_speedSlider);
+    blinkLayout->addSpacerItem( new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding));
+    mainLayout->addLayout(blinkLayout);
+    blinkTimer = new QTimer(this);
 
     // Signal/Slot Connections
-    connect(slider, &QSlider::valueChanged, this, &RonchiCompareDialog::updateOverlay);
-    connect(saveBtn, &QPushButton::clicked, this, &RonchiCompareDialog::onSaveClicked);
+    connect(m_slider, &QSlider::valueChanged, this, &RonchiCompareDialog::updateOverlay);
+    connect(m_saveBtn, &QPushButton::clicked, this, &RonchiCompareDialog::onSaveClicked);
+    connect(blinkBtn, &QPushButton::clicked, this, &RonchiCompareDialog::startBlink);
+    connect(blinkTimer, &QTimer::timeout, this, &RonchiCompareDialog::blink);
 
     // Perform initial render
     updateOverlay(50);
@@ -70,6 +89,39 @@ RonchiCompareDialog::RonchiCompareDialog(const QImage& img1, const QString& name
 RonchiCompareDialog::~RonchiCompareDialog()
 {
     // Destructor implementation to satisfy vtable requirements
+}
+
+void RonchiCompareDialog::startBlink(){
+    if (blinking){
+        blinkTimer->stop();
+        updateOverlay(50);
+        blinking = false;
+        m_slider->show();
+        m_saveBtn->show();
+        m_speedSlider->hide();
+        m_info->setText(tr("Blend Ratio (Slide to compare difference):"));
+    }
+    else {
+        blinking = true;
+        blinkTimer->start(300);
+        m_slider->hide();
+        m_saveBtn->hide();
+        m_speedSlider->show();
+
+    }
+}
+
+void RonchiCompareDialog::blink(){
+    blinkone = !blinkone;
+    if (blinkone){
+        m_displayLabel->setPixmap(QPixmap::fromImage(m_q1));
+        m_info->setText(m_baseLabel->text());
+    }
+    else {
+        m_displayLabel->setPixmap(QPixmap::fromImage(m_q2));
+        m_info->setText(m_compLabel->text());
+    }
+    blinkTimer->start(m_speedSlider->value());
 }
 
 cv::Mat RonchiCompareDialog::qImageToMat(const QImage& image)
