@@ -127,6 +127,15 @@ macx {
         message(............OPENCV: opencv5)
     }
 
+    # Homebrew builds qwt as a macOS framework, so the headers sit inside the
+    # bundle rather than in the include directory its pkg-config file names.
+    # The sources include them unqualified, as <qwt_plot.h>, on every platform.
+    QWT_FRAMEWORK_HEADERS = $$system(pkg-config --variable=libdir Qt6Qwt6)/qwt.framework/Headers
+    exists($$QWT_FRAMEWORK_HEADERS) {
+        INCLUDEPATH += $$QWT_FRAMEWORK_HEADERS
+        message(.......QWT HEADERS: $$QWT_FRAMEWORK_HEADERS)
+    }
+
     LIBS += -lz       # zip compression library needed for cnpy.cpp
 
     message(........QT_VERSION: $$[QT_VERSION])
